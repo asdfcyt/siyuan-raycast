@@ -14,7 +14,7 @@ type ExtensionPreferences = {
   "apiToken"?: string,
   /** 默认笔记本ID - 创建新笔记的默认笔记本ID */
   "notebookId"?: string,
-  /** 每日笔记路径模板 - 每日笔记路径模板 (e.g., /daily/{{date}}) */
+  /** 每日笔记路径模板 - 每日笔记路径模板 (e.g., 笔记本名称/daily/{{date}}) */
   "dailyNotePath": string,
   /** 工作空间路径 - 思源笔记工作区路径 */
   "workspacePath": string
