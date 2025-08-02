@@ -17,7 +17,12 @@ import { siyuanAPI } from "./api/siyuan";
 import { SiYuanBlock } from "./types";
 
 // 漫游类型
-type RoamingType = "random_doc" | "random_block" | "old_notes" | "tag_docs" | "doc_blocks";
+type RoamingType =
+  | "random_doc"
+  | "random_block"
+  | "old_notes"
+  | "tag_docs"
+  | "doc_blocks";
 
 // 随机漫游参数接口
 interface RandomRoamingParams {
@@ -47,13 +52,17 @@ interface DocBlocksParams {
   count: number;
 }
 
-type RoamingParams = RandomRoamingParams | OldNotesParams | TagRoamingParams | DocBlocksParams;
+type RoamingParams =
+  | RandomRoamingParams
+  | OldNotesParams
+  | TagRoamingParams
+  | DocBlocksParams;
 
 // 漫游配置表单组件
-function RoamingConfigForm({ 
-  onSubmit 
-}: { 
-  onSubmit: (params: RoamingParams) => void 
+function RoamingConfigForm({
+  onSubmit,
+}: {
+  onSubmit: (params: RoamingParams) => void;
 }) {
   const [roamingType, setRoamingType] = useState<RoamingType>("random_doc");
   const [count, setCount] = useState<string>("1");
@@ -73,12 +82,12 @@ function RoamingConfigForm({
       }
     },
     [],
-    { keepPreviousData: true }
+    { keepPreviousData: true },
   );
 
   const handleSubmit = () => {
     const countNum = parseInt(count) || 1;
-    
+
     switch (roamingType) {
       case "random_doc":
       case "random_block":
@@ -145,13 +154,33 @@ function RoamingConfigForm({
         onChange={(value) => setRoamingType(value as RoamingType)}
       >
         <Form.Dropdown.Section title="完全随机漫游">
-          <Form.Dropdown.Item value="random_doc" title="随机文档漫游" icon={Icon.Document} />
-          <Form.Dropdown.Item value="random_block" title="随机块漫游" icon={Icon.TextCursor} />
-          <Form.Dropdown.Item value="old_notes" title="年老笔记回顾" icon={Icon.Calendar} />
+          <Form.Dropdown.Item
+            value="random_doc"
+            title="随机文档漫游"
+            icon={Icon.Document}
+          />
+          <Form.Dropdown.Item
+            value="random_block"
+            title="随机块漫游"
+            icon={Icon.TextCursor}
+          />
+          <Form.Dropdown.Item
+            value="old_notes"
+            title="年老笔记回顾"
+            icon={Icon.Calendar}
+          />
         </Form.Dropdown.Section>
         <Form.Dropdown.Section title="主题漫游">
-          <Form.Dropdown.Item value="tag_docs" title="标签文档漫游" icon={Icon.Tag} />
-          <Form.Dropdown.Item value="doc_blocks" title="文档内块漫游" icon={Icon.Sidebar} />
+          <Form.Dropdown.Item
+            value="tag_docs"
+            title="标签文档漫游"
+            icon={Icon.Tag}
+          />
+          <Form.Dropdown.Item
+            value="doc_blocks"
+            title="文档内块漫游"
+            icon={Icon.Sidebar}
+          />
         </Form.Dropdown.Section>
       </Form.Dropdown>
 
@@ -220,19 +249,25 @@ function RoamingConfigForm({
 }
 
 // 漫游结果显示组件
-function RoamingResults({ 
-  params, 
-  onBack 
-}: { 
+function RoamingResults({
+  params,
+  onBack,
+}: {
   params: RoamingParams;
   onBack: () => void;
 }) {
   const [selectedItemId, setSelectedItemId] = useState<string>("");
-  const [detailContentMap, setDetailContentMap] = useState<Record<string, string>>({});
+  const [detailContentMap, setDetailContentMap] = useState<
+    Record<string, string>
+  >({});
   const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set());
 
   // 获取漫游数据
-  const { isLoading, data: results = [], revalidate } = useCachedPromise(
+  const {
+    isLoading,
+    data: results = [],
+    revalidate,
+  } = useCachedPromise(
     async () => {
       try {
         switch (params.type) {
@@ -241,11 +276,18 @@ function RoamingResults({
           case "random_block":
             return await siyuanAPI.getRandomBlocks(params.count);
           case "old_notes":
-            return await siyuanAPI.getOldNotes(params.timeType, params.timeValue, params.count);
+            return await siyuanAPI.getOldNotes(
+              params.timeType,
+              params.timeValue,
+              params.count,
+            );
           case "tag_docs":
             return await siyuanAPI.getDocumentsByTag(params.tag, params.count);
           case "doc_blocks":
-            return await siyuanAPI.getBlocksByDocumentId(params.docId, params.count);
+            return await siyuanAPI.getBlocksByDocumentId(
+              params.docId,
+              params.count,
+            );
           default:
             return [];
         }
@@ -260,52 +302,59 @@ function RoamingResults({
       }
     },
     [],
-    { keepPreviousData: false }
+    { keepPreviousData: false },
   );
 
   // 加载特定项目的详情内容
-  const loadItemDetail = useCallback(async (item: SiYuanBlock) => {
-    if (detailContentMap[item.id] || loadingItems.has(item.id)) {
-      return;
-    }
-
-    setLoadingItems(prev => new Set(prev).add(item.id));
-
-    try {
-      let content = "";
-      if (item.isDocument) {
-        // 文档类型，获取完整内容
-        content = await siyuanAPI.getDocumentContent(item.id);
-      } else {
-        // 块类型，使用现有内容
-        content = item.markdown || item.content || "无内容";
+  const loadItemDetail = useCallback(
+    async (item: SiYuanBlock) => {
+      if (detailContentMap[item.id] || loadingItems.has(item.id)) {
+        return;
       }
 
-      setDetailContentMap(prev => ({
-        ...prev,
-        [item.id]: content,
-      }));
-    } catch (error) {
-      console.error("加载详情失败:", error);
-      showToast({
-        style: Toast.Style.Failure,
-        title: "加载详情失败",
-        message: error instanceof Error ? error.message : "未知错误",
-      });
-    } finally {
-      setLoadingItems(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(item.id);
-        return newSet;
-      });
-    }
-  }, [detailContentMap, loadingItems]);
+      setLoadingItems((prev) => new Set(prev).add(item.id));
+
+      try {
+        let content = "";
+        if (item.isDocument) {
+          // 文档类型，获取完整内容
+          content = await siyuanAPI.getDocumentContent(item.id);
+        } else {
+          // 块类型，使用现有内容
+          content = item.markdown || item.content || "无内容";
+        }
+
+        setDetailContentMap((prev) => ({
+          ...prev,
+          [item.id]: content,
+        }));
+      } catch (error) {
+        console.error("加载详情失败:", error);
+        showToast({
+          style: Toast.Style.Failure,
+          title: "加载详情失败",
+          message: error instanceof Error ? error.message : "未知错误",
+        });
+      } finally {
+        setLoadingItems((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(item.id);
+          return newSet;
+        });
+      }
+    },
+    [detailContentMap, loadingItems],
+  );
 
   // 当选择改变时，自动加载详情
   React.useEffect(() => {
     if (selectedItemId && results.length > 0) {
-      const selectedItem = results.find(item => item.id === selectedItemId);
-      if (selectedItem && !detailContentMap[selectedItemId] && !loadingItems.has(selectedItemId)) {
+      const selectedItem = results.find((item) => item.id === selectedItemId);
+      if (
+        selectedItem &&
+        !detailContentMap[selectedItemId] &&
+        !loadingItems.has(selectedItemId)
+      ) {
         loadItemDetail(selectedItem);
       }
     }
@@ -340,15 +389,17 @@ function RoamingResults({
         {results.map((item) => {
           const isLoading = loadingItems.has(item.id);
           const hasDetail = detailContentMap[item.id];
-          
+
           return (
             <List.Item
               key={item.id}
               id={item.id}
-              title={item.isDocument ? item.content : (item.doc_title || "未知文档")}
+              title={
+                item.isDocument ? item.content : item.doc_title || "未知文档"
+              }
               subtitle={item.isDocument ? item.hpath : item.content}
               accessories={[
-                { 
+                {
                   text: item.notebook_name,
                   icon: Icon.Book,
                 },
@@ -358,7 +409,9 @@ function RoamingResults({
                   tooltip: item.isDocument ? "文档" : "内容块",
                 },
                 {
-                  text: new Date(parseInt(item.updated) * 1000).toLocaleDateString("zh-CN"),
+                  text: new Date(
+                    parseInt(item.updated) * 1000,
+                  ).toLocaleDateString("zh-CN"),
                   icon: Icon.Calendar,
                 },
               ]}
@@ -385,12 +438,16 @@ function RoamingResults({
                       <List.Item.Detail.Metadata.Separator />
                       <List.Item.Detail.Metadata.Label
                         title="创建时间"
-                        text={new Date(parseInt(item.created) * 1000).toLocaleString("zh-CN")}
+                        text={new Date(
+                          parseInt(item.created) * 1000,
+                        ).toLocaleString("zh-CN")}
                         icon={Icon.Plus}
                       />
                       <List.Item.Detail.Metadata.Label
                         title="修改时间"
-                        text={new Date(parseInt(item.updated) * 1000).toLocaleString("zh-CN")}
+                        text={new Date(
+                          parseInt(item.updated) * 1000,
+                        ).toLocaleString("zh-CN")}
                         icon={Icon.Pencil}
                       />
                       <List.Item.Detail.Metadata.Separator />
@@ -407,24 +464,25 @@ function RoamingResults({
                   <ActionPanel.Section title="查看操作">
                     <Action.OpenInBrowser
                       title="在思源中打开"
-                      url={siyuanAPI.getDocUrl(item.isDocument ? item.id : item.root_id || item.rootID)}
+                      url={siyuanAPI.getDocUrl(
+                        item.isDocument ? item.id : item.root_id || item.rootID,
+                      )}
                     />
                   </ActionPanel.Section>
-                  
+
                   <ActionPanel.Section title="复制操作">
                     <Action.CopyToClipboard
                       title="复制标题"
-                      content={item.isDocument ? item.content : (item.doc_title || "")}
+                      content={
+                        item.isDocument ? item.content : item.doc_title || ""
+                      }
                       shortcut={{ modifiers: ["cmd"], key: "c" }}
                     />
                     <Action.CopyToClipboard
                       title="复制内容"
                       content={item.markdown || item.content || ""}
                     />
-                    <Action.CopyToClipboard
-                      title="复制ID"
-                      content={item.id}
-                    />
+                    <Action.CopyToClipboard title="复制id" content={item.id} />
                   </ActionPanel.Section>
 
                   <ActionPanel.Section title="漫游操作">
@@ -447,7 +505,7 @@ function RoamingResults({
           );
         })}
       </List.Section>
-      
+
       {results.length === 0 && !isLoading && (
         <List.EmptyView
           title="没有找到内容"
@@ -471,25 +529,27 @@ function RoamingResults({
 // 主组件
 export default function NoteRoaming() {
   const { push, pop } = useNavigation();
-  const [roamingParams, setRoamingParams] = useState<RoamingParams | null>(null);
+  const [roamingParams, setRoamingParams] = useState<RoamingParams | null>(
+    null,
+  );
 
   const handleStartRoaming = (params: RoamingParams) => {
     setRoamingParams(params);
     push(
-      <RoamingResults 
-        params={params} 
+      <RoamingResults
+        params={params}
         onBack={() => {
           setRoamingParams(null);
           pop();
         }}
-      />
+      />,
     );
   };
 
   if (roamingParams) {
     return (
-      <RoamingResults 
-        params={roamingParams} 
+      <RoamingResults
+        params={roamingParams}
         onBack={() => setRoamingParams(null)}
       />
     );

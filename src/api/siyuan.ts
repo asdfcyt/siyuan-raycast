@@ -7,6 +7,7 @@ import {
   SiYuanTemplate,
   CreateNoteParams,
   SiYuanBlock,
+  AssetFile,
 } from "../types";
 
 interface Preferences {
@@ -1098,7 +1099,8 @@ class SiYuanAPI {
           (block as SiYuanBlock & { doc_title?: string }).doc_title ||
           block.content,
         doc_path:
-          (block as SiYuanBlock & { doc_path?: string }).doc_path || block.hpath,
+          (block as SiYuanBlock & { doc_path?: string }).doc_path ||
+          block.hpath,
         notebook_name: notebookName,
         notebook_id: block.box,
         isDocument: false,
@@ -1124,7 +1126,7 @@ class SiYuanAPI {
     // 计算目标时间点
     const now = new Date();
     const targetDate = new Date(now);
-    
+
     if (timeType === "months") {
       targetDate.setMonth(now.getMonth() - timeValue);
     } else {
@@ -1134,8 +1136,8 @@ class SiYuanAPI {
     // 思源笔记使用14位字符串时间戳格式 YYYYMMDDHHMMSS
     const formatTimestamp = (date: Date): string => {
       const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
       return `${year}${month}${day}000000`; // 设置为当天开始
     };
 
@@ -1197,19 +1199,19 @@ class SiYuanAPI {
 
     console.log("标签查询SQL:", sql);
 
-    const response = await this.request<Array<{ tag: string }>>(
-      "/query/sql",
-      { stmt: sql }
-    );
+    const response = await this.request<Array<{ tag: string }>>("/query/sql", {
+      stmt: sql,
+    });
 
     // 处理标签字符串，可能包含多个标签用空格分隔
     const allTags = new Set<string>();
     (response || []).forEach((item) => {
       if (item.tag && item.tag.trim()) {
         // 标签可能是 "tag1 tag2 tag3" 的格式，需要分割
-        const tags = item.tag.split(/\s+/).filter(t => t.startsWith('#'));
-        tags.forEach(tag => {
-          if (tag.length > 1) { // 过滤掉单独的 # 号
+        const tags = item.tag.split(/\s+/).filter((t) => t.startsWith("#"));
+        tags.forEach((tag) => {
+          if (tag.length > 1) {
+            // 过滤掉单独的 # 号
             allTags.add(tag);
           }
         });
@@ -1222,7 +1224,10 @@ class SiYuanAPI {
   }
 
   // 根据标签获取相关的文档
-  async getDocumentsByTag(tag: string, limit: number = 10): Promise<SiYuanBlock[]> {
+  async getDocumentsByTag(
+    tag: string,
+    limit: number = 10,
+  ): Promise<SiYuanBlock[]> {
     console.log(`根据标签获取文档: ${tag}`);
 
     // 首先获取笔记本列表来创建映射
@@ -1230,7 +1235,7 @@ class SiYuanAPI {
     const notebookMap = new Map(notebooks.map((nb) => [nb.id, nb.name]));
 
     // 清理标签（确保以#开头）
-    const cleanTag = tag.startsWith('#') ? tag : `#${tag}`;
+    const cleanTag = tag.startsWith("#") ? tag : `#${tag}`;
 
     const sql = `
       SELECT DISTINCT d.* FROM blocks d
@@ -1261,10 +1266,11 @@ class SiYuanAPI {
     return docs;
   }
 
-
-
   // 根据文档ID获取该文档的所有块（用于文档内随机漫游）
-  async getBlocksByDocumentId(docId: string, limit: number = 20): Promise<SiYuanBlock[]> {
+  async getBlocksByDocumentId(
+    docId: string,
+    limit: number = 20,
+  ): Promise<SiYuanBlock[]> {
     console.log(`获取文档内的块: ${docId}`);
 
     // 首先获取笔记本列表来创建映射
@@ -1321,6 +1327,211 @@ class SiYuanAPI {
 
     console.log("文档块结果:", blocks);
     return blocks;
+  }
+
+  // ======== Assets 附件管理功能 ========
+
+  // 读取 assets 文件夹内容
+  async readAssetsDir(): Promise<AssetFile[]> {
+    console.log("读取 assets 文件夹内容");
+
+    try {
+      // 直接使用文件系统读取，而不是通过 SiYuan API
+      const assetsPath = this.getAssetsDirectoryPath();
+      if (!assetsPath) {
+        throw new Error("无法确定 assets 文件夹路径，请检查工作空间配置");
+      }
+
+      console.log(`Assets 文件夹路径: ${assetsPath}`);
+
+      const fs = await import("fs/promises");
+      const path = await import("path");
+
+      // 检查文件夹是否存在
+      try {
+        await fs.access(assetsPath);
+      } catch {
+        console.warn(`Assets 文件夹不存在: ${assetsPath}`);
+        return [];
+      }
+
+      // 读取文件夹内容
+      const files = await fs.readdir(assetsPath, { withFileTypes: true });
+
+      const assetFiles: AssetFile[] = [];
+
+      for (const file of files) {
+        // 只处理文件，跳过文件夹
+        if (file.isFile()) {
+          const filePath = path.join(assetsPath, file.name);
+
+          try {
+            const stats = await fs.stat(filePath);
+
+            assetFiles.push({
+              name: file.name,
+              path: `assets/${file.name}`, // 相对路径
+              size: stats.size,
+              modTime: stats.mtime.toISOString(),
+              isDir: false,
+              isAsset: true,
+              extension: this.getFileExtension(file.name),
+              type: this.getFileType(file.name),
+              fullPath: filePath, // 绝对路径
+            });
+          } catch (error) {
+            console.warn(`无法获取文件信息: ${file.name}`, error);
+          }
+        }
+      }
+
+      console.log(`找到 ${assetFiles.length} 个文件`);
+      return assetFiles;
+    } catch (error) {
+      console.error("读取 assets 文件夹失败:", error);
+      return [];
+    }
+  }
+
+  // 获取 assets 文件夹的绝对路径
+  private getAssetsDirectoryPath(): string | null {
+    // 如果用户配置了工作空间路径，使用配置的路径
+    if (this.preferences.workspacePath) {
+      const workspacePath = this.preferences.workspacePath.replace(/\/$/, ""); // 移除末尾斜杠
+      return `${workspacePath}/data/assets`;
+    }
+
+    // 回退到常见的SiYuan数据目录位置
+    const userHome =
+      process.env.HOME || process.env.USERPROFILE || "/Users/用户名";
+    const possiblePaths = [
+      `${userHome}/Documents/SiYuan/data/assets`,
+      `${userHome}/SiYuan/data/assets`,
+      `${userHome}/.siyuan/data/assets`,
+      `${userHome}/Library/Application Support/SiYuan/data/assets`,
+      `${userHome}/AppData/Roaming/SiYuan/data/assets`, // Windows
+    ];
+
+    // 返回第一个可能的路径
+    return possiblePaths[0];
+  }
+
+  // 获取文件扩展名
+  private getFileExtension(fileName: string): string {
+    const lastDot = fileName.lastIndexOf(".");
+    return lastDot !== -1 ? fileName.substring(lastDot + 1).toLowerCase() : "";
+  }
+
+  // 根据文件扩展名判断文件类型
+  private getFileType(
+    fileName: string,
+  ): "image" | "document" | "archive" | "video" | "audio" | "other" {
+    const ext = this.getFileExtension(fileName);
+
+    if (
+      ["jpg", "jpeg", "png", "gif", "bmp", "svg", "webp", "ico"].includes(ext)
+    ) {
+      return "image";
+    }
+    if (["pdf", "doc", "docx", "txt", "md", "rtf", "odt"].includes(ext)) {
+      return "document";
+    }
+    if (["zip", "rar", "7z", "tar", "gz", "bz2"].includes(ext)) {
+      return "archive";
+    }
+    if (["mp4", "avi", "mov", "wmv", "flv", "mkv", "webm"].includes(ext)) {
+      return "video";
+    }
+    if (["mp3", "wav", "flac", "aac", "ogg", "m4a"].includes(ext)) {
+      return "audio";
+    }
+    return "other";
+  }
+
+  // 查找引用特定附件的文档
+  async findDocumentsReferencingAsset(
+    assetName: string,
+  ): Promise<
+    { doc_id: string; doc_title: string; doc_path: string; updated: string }[]
+  > {
+    console.log(`查找引用附件的文档: ${assetName}`);
+
+    try {
+      // 搜索包含该附件引用的块
+      const sql = `
+        SELECT DISTINCT d.id as doc_id, d.content as doc_title, d.hpath as doc_path, d.updated
+        FROM blocks b
+        LEFT JOIN blocks d ON b.root_id = d.id AND d.type = 'd'
+        WHERE (b.content LIKE '%assets/${assetName}%' OR b.markdown LIKE '%assets/${assetName}%')
+          AND d.id IS NOT NULL
+        ORDER BY d.updated DESC
+        LIMIT 5
+      `;
+
+      console.log("引用文档查询SQL:", sql);
+
+      const response = await this.request<
+        Array<{
+          doc_id: string;
+          doc_title: string;
+          doc_path: string;
+          updated: string;
+        }>
+      >("/query/sql", { stmt: sql });
+
+      return response || [];
+    } catch (error) {
+      console.error("查找引用文档失败:", error);
+      return [];
+    }
+  }
+
+  // 搜索和过滤 assets 文件
+  async searchAssets(
+    query: string = "",
+    fileType?: "image" | "document" | "archive" | "video" | "audio" | "other",
+  ): Promise<AssetFile[]> {
+    console.log(`搜索 assets 文件: "${query}", 类型: ${fileType}`);
+
+    const allFiles = await this.readAssetsDir();
+
+    // 过滤掉 SiYuan 内部文件和应用过滤条件
+    const filteredFiles = allFiles.filter((file) => {
+      // 过滤掉 .sya 文件（SiYuan 内部文件）
+      if (file.extension === "sya") {
+        return false;
+      }
+
+      // 按文件名搜索
+      const nameMatch =
+        !query || file.name.toLowerCase().includes(query.toLowerCase());
+
+      // 按文件类型过滤
+      const typeMatch = !fileType || file.type === fileType;
+
+      return nameMatch && typeMatch;
+    });
+
+    // 为每个文件查找引用的文档信息
+    const filesWithRefs = await Promise.all(
+      filteredFiles.map(async (file) => {
+        const referencingDocs = await this.findDocumentsReferencingAsset(
+          file.name,
+        );
+        const latestDoc =
+          referencingDocs.length > 0 ? referencingDocs[0] : null;
+
+        return {
+          ...file,
+          referencedBy: latestDoc ? latestDoc.doc_title : null,
+          referencedByPath: latestDoc ? latestDoc.doc_path : null,
+          referencedByDocId: latestDoc ? latestDoc.doc_id : null,
+          lastReferencedTime: latestDoc ? latestDoc.updated : null,
+        };
+      }),
+    );
+
+    return filesWithRefs;
   }
 }
 

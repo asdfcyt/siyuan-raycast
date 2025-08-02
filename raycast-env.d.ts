@@ -34,6 +34,8 @@ declare namespace Preferences {
   export type RecentNotes = ExtensionPreferences & {}
   /** Preferences accessible in the `note-roaming` command */
   export type NoteRoaming = ExtensionPreferences & {}
+  /** Preferences accessible in the `find-assets` command */
+  export type FindAssets = ExtensionPreferences & {}
 }
 
 declare namespace Arguments {
@@ -55,5 +57,7 @@ declare namespace Arguments {
   export type RecentNotes = {}
   /** Arguments passed to the `note-roaming` command */
   export type NoteRoaming = {}
+  /** Arguments passed to the `find-assets` command */
+  export type FindAssets = {}
 }
 

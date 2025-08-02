@@ -61,6 +61,12 @@
       "title": "Note Roaming",
       "description": "笔记漫游功能：支持随机漫游、标签主题漫游和年老笔记回顾",
       "mode": "view"
+    },
+    {
+      "name": "find-assets",
+      "title": "Find Assets",
+      "description": "快速查找和管理 SiYuan assets 文件夹中的附件文件",
+      "mode": "view"
     }
   ],
   "preferences": [
