@@ -1020,6 +1020,308 @@ class SiYuanAPI {
 
     await this.appendBlock(dailyNoteId, contentToAdd);
   }
+
+  // ======== 笔记漫游功能 ========
+
+  // 随机获取文档
+  async getRandomDocuments(limit: number = 1): Promise<SiYuanBlock[]> {
+    console.log(`获取随机文档，数量: ${limit}`);
+
+    // 首先获取笔记本列表来创建映射
+    const notebooks = await this.getNotebooks();
+    const notebookMap = new Map(notebooks.map((nb) => [nb.id, nb.name]));
+
+    // 使用随机排序获取文档
+    const sql = `
+      SELECT * FROM blocks 
+      WHERE type = 'd' 
+      ORDER BY RANDOM() 
+      LIMIT ${limit}
+    `;
+
+    console.log("随机文档SQL:", sql);
+
+    const response = await this.request<SiYuanBlock[]>("/query/sql", {
+      stmt: sql,
+    });
+
+    // 转换为预期的格式，添加笔记本信息
+    const docs = (response || []).map((doc) => {
+      const notebookName = notebookMap.get(doc.box) || "未知笔记本";
+      return {
+        ...doc,
+        notebook_name: notebookName,
+        notebook_id: doc.box,
+        isDocument: true,
+      };
+    });
+
+    console.log("随机文档结果:", docs);
+    return docs;
+  }
+
+  // 随机获取块
+  async getRandomBlocks(limit: number = 1): Promise<SiYuanBlock[]> {
+    console.log(`获取随机块，数量: ${limit}`);
+
+    // 首先获取笔记本列表来创建映射
+    const notebooks = await this.getNotebooks();
+    const notebookMap = new Map(notebooks.map((nb) => [nb.id, nb.name]));
+
+    // 使用随机排序获取块（排除文档类型）
+    const sql = `
+      SELECT 
+        b.*,
+        doc.content as doc_title,
+        doc.hpath as doc_path
+      FROM blocks b
+      LEFT JOIN blocks doc ON b.root_id = doc.id AND doc.type = 'd'
+      WHERE b.type != 'd' 
+        AND b.content != ''
+        AND LENGTH(b.content) > 10
+      ORDER BY RANDOM() 
+      LIMIT ${limit}
+    `;
+
+    console.log("随机块SQL:", sql);
+
+    const response = await this.request<SiYuanBlock[]>("/query/sql", {
+      stmt: sql,
+    });
+
+    // 转换为预期的格式，添加文档标题和笔记本信息
+    const blocks = (response || []).map((block) => {
+      const notebookName = notebookMap.get(block.box) || "未知笔记本";
+      return {
+        ...block,
+        doc_title:
+          (block as SiYuanBlock & { doc_title?: string }).doc_title ||
+          block.content,
+        doc_path:
+          (block as SiYuanBlock & { doc_path?: string }).doc_path || block.hpath,
+        notebook_name: notebookName,
+        notebook_id: block.box,
+        isDocument: false,
+      };
+    });
+
+    console.log("随机块结果:", blocks);
+    return blocks;
+  }
+
+  // 获取年老笔记（X个月或X年前的文档）
+  async getOldNotes(
+    timeType: "months" | "years",
+    timeValue: number,
+    limit: number = 10,
+  ): Promise<SiYuanBlock[]> {
+    console.log(`获取年老笔记: ${timeValue} ${timeType} 前的文档`);
+
+    // 首先获取笔记本列表来创建映射
+    const notebooks = await this.getNotebooks();
+    const notebookMap = new Map(notebooks.map((nb) => [nb.id, nb.name]));
+
+    // 计算目标时间点
+    const now = new Date();
+    const targetDate = new Date(now);
+    
+    if (timeType === "months") {
+      targetDate.setMonth(now.getMonth() - timeValue);
+    } else {
+      targetDate.setFullYear(now.getFullYear() - timeValue);
+    }
+
+    // 思源笔记使用14位字符串时间戳格式 YYYYMMDDHHMMSS
+    const formatTimestamp = (date: Date): string => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}${month}${day}000000`; // 设置为当天开始
+    };
+
+    // 计算时间范围
+    const endDate = new Date(targetDate);
+    endDate.setHours(23, 59, 59, 999); // 设置为当天结束
+    const endTimestamp = formatTimestamp(endDate);
+
+    // 设置开始时间（前一个月或半年）
+    const startDate = new Date(targetDate);
+    if (timeType === "months") {
+      startDate.setMonth(targetDate.getMonth() - 1);
+    } else {
+      startDate.setMonth(targetDate.getMonth() - 6);
+    }
+    const startTimestamp = formatTimestamp(startDate);
+
+    // 查询年老笔记，只查找创建时间在指定范围内且很久没有修改的文档
+    const sql = `
+      SELECT * FROM blocks 
+      WHERE type = 'd' 
+        AND created BETWEEN '${startTimestamp}' AND '${endTimestamp}'
+        AND (updated = created OR updated < '${endTimestamp}')
+      ORDER BY created DESC 
+      LIMIT ${limit}
+    `;
+
+    console.log("年老笔记SQL:", sql);
+    console.log("时间范围:", startTimestamp, "到", endTimestamp);
+
+    const response = await this.request<SiYuanBlock[]>("/query/sql", {
+      stmt: sql,
+    });
+
+    // 转换为预期的格式，添加笔记本信息
+    const docs = (response || []).map((doc) => {
+      const notebookName = notebookMap.get(doc.box) || "未知笔记本";
+      return {
+        ...doc,
+        notebook_name: notebookName,
+        notebook_id: doc.box,
+        isDocument: true,
+      };
+    });
+
+    console.log("年老笔记结果:", docs);
+    return docs;
+  }
+
+  // 获取所有标签
+  async getAllTags(): Promise<string[]> {
+    console.log("获取所有标签");
+
+    const sql = `
+      SELECT DISTINCT tag FROM blocks 
+      WHERE tag != '' AND tag IS NOT NULL
+      ORDER BY tag
+    `;
+
+    console.log("标签查询SQL:", sql);
+
+    const response = await this.request<Array<{ tag: string }>>(
+      "/query/sql",
+      { stmt: sql }
+    );
+
+    // 处理标签字符串，可能包含多个标签用空格分隔
+    const allTags = new Set<string>();
+    (response || []).forEach((item) => {
+      if (item.tag && item.tag.trim()) {
+        // 标签可能是 "tag1 tag2 tag3" 的格式，需要分割
+        const tags = item.tag.split(/\s+/).filter(t => t.startsWith('#'));
+        tags.forEach(tag => {
+          if (tag.length > 1) { // 过滤掉单独的 # 号
+            allTags.add(tag);
+          }
+        });
+      }
+    });
+
+    const result = Array.from(allTags).sort();
+    console.log("所有标签:", result);
+    return result;
+  }
+
+  // 根据标签获取相关的文档
+  async getDocumentsByTag(tag: string, limit: number = 10): Promise<SiYuanBlock[]> {
+    console.log(`根据标签获取文档: ${tag}`);
+
+    // 首先获取笔记本列表来创建映射
+    const notebooks = await this.getNotebooks();
+    const notebookMap = new Map(notebooks.map((nb) => [nb.id, nb.name]));
+
+    // 清理标签（确保以#开头）
+    const cleanTag = tag.startsWith('#') ? tag : `#${tag}`;
+
+    const sql = `
+      SELECT DISTINCT d.* FROM blocks d
+      WHERE d.type = 'd' 
+        AND (d.tag LIKE '%${cleanTag}%' OR d.content LIKE '%${cleanTag}%')
+      ORDER BY d.updated DESC 
+      LIMIT ${limit}
+    `;
+
+    console.log("标签文档查询SQL:", sql);
+
+    const response = await this.request<SiYuanBlock[]>("/query/sql", {
+      stmt: sql,
+    });
+
+    // 转换为预期的格式，添加笔记本信息
+    const docs = (response || []).map((doc) => {
+      const notebookName = notebookMap.get(doc.box) || "未知笔记本";
+      return {
+        ...doc,
+        notebook_name: notebookName,
+        notebook_id: doc.box,
+        isDocument: true,
+      };
+    });
+
+    console.log("标签文档结果:", docs);
+    return docs;
+  }
+
+
+
+  // 根据文档ID获取该文档的所有块（用于文档内随机漫游）
+  async getBlocksByDocumentId(docId: string, limit: number = 20): Promise<SiYuanBlock[]> {
+    console.log(`获取文档内的块: ${docId}`);
+
+    // 首先获取笔记本列表来创建映射
+    const notebooks = await this.getNotebooks();
+    const notebookMap = new Map(notebooks.map((nb) => [nb.id, nb.name]));
+
+    // 先获取文档信息
+    const docSql = `
+      SELECT content, hpath FROM blocks 
+      WHERE id = '${docId}' AND type = 'd'
+    `;
+
+    const docResponse = await this.request<SiYuanBlock[]>("/query/sql", {
+      stmt: docSql,
+    });
+
+    if (!docResponse || docResponse.length === 0) {
+      return [];
+    }
+
+    const doc = docResponse[0];
+    const docTitle = doc.content || "未知文档";
+    const docPath = doc.hpath || "";
+
+    // 获取文档下的所有内容块
+    const sql = `
+      SELECT * FROM blocks 
+      WHERE root_id = '${docId}' 
+        AND type != 'd'
+        AND content != ''
+        AND LENGTH(content) > 5
+      ORDER BY RANDOM()
+      LIMIT ${limit}
+    `;
+
+    console.log("文档块查询SQL:", sql);
+
+    const response = await this.request<SiYuanBlock[]>("/query/sql", {
+      stmt: sql,
+    });
+
+    // 转换为预期的格式，添加文档标题和笔记本信息
+    const blocks = (response || []).map((block) => {
+      const notebookName = notebookMap.get(block.box) || "未知笔记本";
+      return {
+        ...block,
+        doc_title: docTitle,
+        doc_path: docPath,
+        notebook_name: notebookName,
+        notebook_id: block.box,
+        isDocument: false,
+      };
+    });
+
+    console.log("文档块结果:", blocks);
+    return blocks;
+  }
 }
 
 export const siyuanAPI = new SiYuanAPI();

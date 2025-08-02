@@ -55,6 +55,12 @@
       "title": "Recent Notes",
       "description": "查看和访问最近修改的思源笔记文档",
       "mode": "view"
+    },
+    {
+      "name": "note-roaming",
+      "title": "Note Roaming",
+      "description": "笔记漫游功能：支持随机漫游、标签主题漫游和年老笔记回顾",
+      "mode": "view"
     }
   ],
   "preferences": [

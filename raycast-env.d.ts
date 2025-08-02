@@ -32,6 +32,8 @@ declare namespace Preferences {
   export type AddToDailyNote = ExtensionPreferences & {}
   /** Preferences accessible in the `recent-notes` command */
   export type RecentNotes = ExtensionPreferences & {}
+  /** Preferences accessible in the `note-roaming` command */
+  export type NoteRoaming = ExtensionPreferences & {}
 }
 
 declare namespace Arguments {
@@ -51,5 +53,7 @@ declare namespace Arguments {
 }
   /** Arguments passed to the `recent-notes` command */
   export type RecentNotes = {}
+  /** Arguments passed to the `note-roaming` command */
+  export type NoteRoaming = {}
 }
 
