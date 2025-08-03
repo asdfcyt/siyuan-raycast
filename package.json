@@ -67,6 +67,20 @@
       "title": "Find Assets",
       "description": "快速查找和管理 SiYuan assets 文件夹中的附件文件",
       "mode": "view"
+    },
+    {
+      "name": "quick-add-note",
+      "title": "Quick Add Note",
+      "description": "快速添加剪贴板内容到最近编辑的思源笔记文档中",
+      "mode": "view",
+      "arguments": [
+        {
+          "name": "content",
+          "placeholder": "要添加的内容",
+          "type": "text",
+          "required": false
+        }
+      ]
     }
   ],
   "preferences": [

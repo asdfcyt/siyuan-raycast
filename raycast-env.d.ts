@@ -36,6 +36,8 @@ declare namespace Preferences {
   export type NoteRoaming = ExtensionPreferences & {}
   /** Preferences accessible in the `find-assets` command */
   export type FindAssets = ExtensionPreferences & {}
+  /** Preferences accessible in the `quick-add-note` command */
+  export type QuickAddNote = ExtensionPreferences & {}
 }
 
 declare namespace Arguments {
@@ -59,5 +61,10 @@ declare namespace Arguments {
   export type NoteRoaming = {}
   /** Arguments passed to the `find-assets` command */
   export type FindAssets = {}
+  /** Arguments passed to the `quick-add-note` command */
+  export type QuickAddNote = {
+  /** 要添加的内容 */
+  "content": string
+}
 }
 

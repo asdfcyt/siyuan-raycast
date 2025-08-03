@@ -1022,6 +1022,55 @@ class SiYuanAPI {
     await this.appendBlock(dailyNoteId, contentToAdd);
   }
 
+  // 添加内容到指定文档
+  async addToDocument(
+    documentId: string,
+    content: string,
+    addTimestamp: boolean = true,
+  ): Promise<void> {
+    if (!documentId || !documentId.trim()) {
+      throw new Error("文档ID不能为空");
+    }
+
+    if (!content || !content.trim()) {
+      throw new Error("内容不能为空");
+    }
+
+    // 首先验证文档是否存在
+    try {
+      await this.getBlockInfo(documentId);
+    } catch (error) {
+      throw new Error(`文档不存在或无法访问: ${error instanceof Error ? error.message : "未知错误"}`);
+    }
+
+    let formattedContent = content.trim();
+
+    if (addTimestamp) {
+      const timestamp = new Date().toLocaleTimeString("zh-CN", {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      formattedContent = `**${timestamp}** ${content.trim()}`;
+    }
+
+    // 添加换行确保格式正确
+    const contentToAdd = `\n${formattedContent}\n`;
+
+    await this.appendBlock(documentId, contentToAdd);
+  }
+
+  // 获取用户最近编辑的文档ID（用于快速添加的默认目标）
+  async getMostRecentDocumentId(): Promise<string | null> {
+    try {
+      const recentDocs = await this.getRecentDocs();
+      return recentDocs.length > 0 ? recentDocs[0].id : null;
+    } catch (error) {
+      console.error("获取最近文档失败:", error);
+      return null;
+    }
+  }
+
   // ======== 笔记漫游功能 ========
 
   // 随机获取文档
