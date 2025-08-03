@@ -1531,6 +1531,205 @@ class SiYuanAPI {
 
     return filesWithRefs;
   }
+
+  // 设置块属性
+  async setBlockAttribute(
+    blockId: string,
+    name: string,
+    value: string,
+  ): Promise<void> {
+    try {
+      console.log(`设置块属性: ${blockId}, ${name}=${value}`);
+      
+      await this.request("/attr/setBlockAttrs", {
+        id: blockId,
+        attrs: {
+          [name]: value,
+        },
+      });
+      
+      console.log(`成功设置块属性: ${blockId}`);
+    } catch (error) {
+      console.error("设置块属性失败:", error);
+      throw error;
+    }
+  }
+
+  // 获取块属性
+  async getBlockAttributes(blockId: string): Promise<Record<string, string>> {
+    try {
+      console.log(`获取块属性: ${blockId}`);
+      
+      const response = await this.request<Record<string, string>>(
+        "/attr/getBlockAttrs",
+        {
+          id: blockId,
+        },
+      );
+      
+      return response || {};
+    } catch (error) {
+      console.error("获取块属性失败:", error);
+      return {};
+    }
+  }
+
+  // 为块添加引用记录
+  async addReferenceRecord(
+    blockId: string,
+    appName: string,
+    timestamp?: string,
+  ): Promise<void> {
+    try {
+      const currentTimestamp = timestamp || new Date().toISOString();
+      const humanReadableTime = this.formatHumanReadableTime(currentTimestamp);
+      const referenceKey = `custom-reference-${Date.now()}`;
+      const referenceValue = `${appName}|${humanReadableTime}|${currentTimestamp}`;
+      
+      // 首先获取现有的引用记录
+      const existingAttrs = await this.getBlockAttributes(blockId);
+      const existingReferences = Object.keys(existingAttrs)
+        .filter((key) => key.startsWith("custom-reference-"))
+        .map((key) => existingAttrs[key]);
+      
+      // 检查是否已经有相同应用的最近引用（5分钟内）
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const hasRecentReference = existingReferences.some((ref) => {
+        const parts = ref.split("|");
+        const refApp = parts[0];
+        const refIsoTime = parts[2] || parts[1]; // 兼容旧格式
+        return refApp === appName && refIsoTime > fiveMinutesAgo;
+      });
+      
+      if (!hasRecentReference) {
+        await this.setBlockAttribute(blockId, referenceKey, referenceValue);
+        
+        // 为块添加书签属性
+        await this.addBookmarkToBlock(blockId);
+        
+        console.log(`为块 ${blockId} 添加引用记录: ${appName}`);
+      } else {
+        console.log(`块 ${blockId} 最近已有 ${appName} 的引用记录，跳过添加`);
+      }
+    } catch (error) {
+      console.error("添加引用记录失败:", error);
+      throw error;
+    }
+  }
+
+  // 获取块的所有引用记录
+  async getBlockReferences(blockId: string): Promise<Array<{ app: string; timestamp: string; isoTimestamp?: string }>> {
+    try {
+      const attrs = await this.getBlockAttributes(blockId);
+      const references = Object.keys(attrs)
+        .filter((key) => key.startsWith("custom-reference-"))
+        .map((key) => {
+          const parts = attrs[key].split("|");
+          const app = parts[0];
+          const humanTime = parts[1];
+          const isoTime = parts[2] || parts[1]; // 兼容旧格式
+          
+          return { 
+            app, 
+            timestamp: humanTime,
+            isoTimestamp: isoTime
+          };
+        })
+        .sort((a, b) => {
+          // 按ISO时间戳排序（更准确）
+          const timeA = (a as any).isoTimestamp || a.timestamp;
+          const timeB = (b as any).isoTimestamp || b.timestamp;
+          return timeB.localeCompare(timeA);
+        });
+      
+      return references;
+    } catch (error) {
+      console.error("获取引用记录失败:", error);
+      return [];
+    }
+  }
+
+  // 格式化时间为人类友好的格式
+  private formatHumanReadableTime(isoString: string): string {
+    const date = new Date(isoString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  }
+
+  // 为块添加书签属性到思源笔记中
+  private async addBookmarkToBlock(blockId: string): Promise<void> {
+    try {
+      console.log(`为块 ${blockId} 添加书签属性`);
+      
+      // 检查是否已经有书签属性
+      const existingAttrs = await this.getBlockAttributes(blockId);
+      if (existingAttrs.bookmark) {
+        console.log(`块 ${blockId} 已经有书签属性`);
+        return;
+      }
+
+      // 添加书签属性
+      await this.setBlockAttribute(blockId, "bookmark", "🔖 引用书签");
+      console.log(`成功为块 ${blockId} 添加书签属性`);
+      
+    } catch (error) {
+      console.error(`为块 ${blockId} 添加书签属性失败:`, error);
+      // 不抛出错误，避免影响主要功能
+    }
+  }
+
+  // 检查块是否有引用记录
+  async hasReferences(blockId: string): Promise<boolean> {
+    try {
+      // 检查属性中的引用记录和书签属性
+      const attrs = await this.getBlockAttributes(blockId);
+      const hasAttrRefs = Object.keys(attrs).some((key) => key.startsWith("custom-reference-"));
+      const hasBookmark = Boolean(attrs.bookmark);
+      
+      // 如果有引用记录且有书签属性，返回true
+      return hasAttrRefs && hasBookmark;
+    } catch (error) {
+      console.error("检查引用记录失败:", error);
+      return false;
+    }
+  }
+
+  // 获取块的引用统计信息
+  async getReferenceStats(blockId: string): Promise<{ 
+    totalReferences: number;
+    uniqueApps: number;
+    lastReferenceTime?: string;
+    appCounts: Record<string, number>;
+  }> {
+    try {
+      const references = await this.getBlockReferences(blockId);
+      
+      const appCounts: Record<string, number> = {};
+      references.forEach(ref => {
+        appCounts[ref.app] = (appCounts[ref.app] || 0) + 1;
+      });
+
+      return {
+        totalReferences: references.length,
+        uniqueApps: Object.keys(appCounts).length,
+        lastReferenceTime: references.length > 0 ? references[0].timestamp : undefined,
+        appCounts
+      };
+    } catch (error) {
+      console.error("获取引用统计失败:", error);
+      return {
+        totalReferences: 0,
+        uniqueApps: 0,
+        appCounts: {}
+      };
+    }
+  }
 }
 
 export const siyuanAPI = new SiYuanAPI();
