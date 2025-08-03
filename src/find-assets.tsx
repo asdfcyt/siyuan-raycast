@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   List,
   ActionPanel,
@@ -25,6 +25,24 @@ export default function FindAssets() {
   const [filterType, setFilterType] = useState<string>("all");
   const preferences = getPreferenceValues<Preferences>();
 
+  // 稳定的搜索文本处理函数，避免频繁重新渲染导致焦点丢失
+  const handleSearchTextChange = useCallback((text: string) => {
+    setSearchText(text);
+  }, []);
+
+  // 使用防抖来减少频繁查询
+  const [debouncedSearchText, setDebouncedSearchText] = useState(searchText);
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchText(searchText);
+    }, 300); // 减少延迟时间，提升响应性
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [searchText]);
+
   // 检查工作空间配置
   const checkWorkspaceConfig = () => {
     if (!preferences.workspacePath || preferences.workspacePath.trim() === "") {
@@ -33,7 +51,7 @@ export default function FindAssets() {
     return true;
   };
 
-  // 搜索 assets 文件
+  // 搜索 assets 文件（使用防抖后的搜索文本）
   const { isLoading, data: rawAssets = [] } = useCachedPromise(
     async (query: string, type: string) => {
       try {
@@ -55,20 +73,33 @@ export default function FindAssets() {
         return [];
       }
     },
-    [searchText, filterType],
+    [debouncedSearchText, filterType],
     {
       keepPreviousData: true,
+      execute: checkWorkspaceConfig(), // 只在配置正确时执行
     },
   );
 
-  // 排序后的文件列表（按名称排序）
-  const assets = [...rawAssets].sort((a, b) => {
-    return a.name.localeCompare(b.name, "zh-CN");
-  });
+  // 排序后的文件列表（按名称排序）- 使用 useMemo 避免频繁重新计算
+  const assets = useMemo(() => {
+    return [...rawAssets].sort((a, b) => {
+      return a.name.localeCompare(b.name, "zh-CN");
+    });
+  }, [rawAssets]);
 
-  // 统计信息
-  const totalFiles = assets.length;
-  const totalSize = assets.reduce((sum, file) => sum + file.size, 0);
+  // 限制同时显示的文件数量，避免渲染过多项目
+  const maxDisplayItems = 100;
+  const displayAssets = useMemo(() => {
+    return assets.slice(0, maxDisplayItems);
+  }, [assets, maxDisplayItems]);
+
+  // 统计信息 - 使用 useMemo 避免频繁重新计算
+  const { totalFiles, totalSize } = useMemo(() => {
+    return {
+      totalFiles: assets.length,
+      totalSize: assets.reduce((sum, file) => sum + file.size, 0)
+    };
+  }, [assets]);
 
   // 格式化文件大小
   const formatFileSize = (bytes: number): string => {
@@ -111,15 +142,90 @@ export default function FindAssets() {
     }
   };
 
+  // 引用信息缓存
+  const [referenceCache, setReferenceCache] = useState<Record<string, { doc_id: string; doc_title: string; doc_path: string; updated: string } | null>>({});
+  const [loadingReferences, setLoadingReferences] = useState<Set<string>>(
+    new Set(),
+  );
+  const [visibleItems, setVisibleItems] = useState<Set<string>>(new Set());
+
+  // 限制并发请求数量
+  const maxConcurrentRequests = 3;
+  const [requestQueue, setRequestQueue] = useState<string[]>([]);
+  const [activeRequests, setActiveRequests] = useState(0);
+
+  // 懒加载引用信息 - 优化版本
+  const loadReferenceInfo = async (fileName: string) => {
+    if (referenceCache[fileName] !== undefined || loadingReferences.has(fileName)) {
+      return; // 已加载或正在加载
+    }
+
+    // 如果达到最大并发数，将请求加入队列
+    if (activeRequests >= maxConcurrentRequests) {
+      setRequestQueue((prev) => [...prev, fileName]);
+      return;
+    }
+
+    setLoadingReferences((prev) => new Set(prev).add(fileName));
+    setActiveRequests((prev) => prev + 1);
+
+    try {
+      const reference = await siyuanAPI.findAssetReference(fileName);
+      setReferenceCache((prev) => ({
+        ...prev,
+        [fileName]: reference,
+      }));
+    } catch (error) {
+      console.error("加载引用信息失败:", error);
+      // 失败时也要记录到缓存中，避免重复请求
+      setReferenceCache((prev) => ({
+        ...prev,
+        [fileName]: null,
+      }));
+    } finally {
+      setLoadingReferences((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(fileName);
+        return newSet;
+      });
+      setActiveRequests((prev) => prev - 1);
+      
+      // 处理队列中的下一个请求
+      setRequestQueue((queue) => {
+        if (queue.length > 0) {
+          const nextFileName = queue[0];
+          const remainingQueue = queue.slice(1);
+          setTimeout(() => loadReferenceInfo(nextFileName), 100);
+          return remainingQueue;
+        }
+        return queue;
+      });
+    }
+  };
+
+  // 当项目变为可见时才加载引用信息
+  const handleItemVisible = (fileName: string) => {
+    if (!visibleItems.has(fileName)) {
+      setVisibleItems((prev) => new Set(prev).add(fileName));
+      // 延迟加载，避免同时触发大量请求
+      setTimeout(() => loadReferenceInfo(fileName), Math.random() * 1000 + 200);
+    }
+  };
+
   // 获取文件的引用信息文本
   const getFileSubtitle = (file: AssetFile): string => {
-    if (file.referencedBy) {
-      const refDate = file.lastReferencedTime
-        ? formatDate(file.lastReferencedTime)
-        : formatDate(file.modTime);
-      return `被引用于: ${file.referencedBy} • ${refDate}`;
+    const cachedReference = referenceCache[file.name];
+    if (cachedReference) {
+      const refDate = formatDate(cachedReference.updated);
+      return `被引用于: ${cachedReference.doc_title} • ${refDate}`;
     }
     return `文件大小: ${formatFileSize(file.size)} • 修改日期: ${formatDate(file.modTime)}`;
+  };
+
+  // 获取引用文档的跳转URL
+  const getReferenceUrl = (fileName: string): string | null => {
+    const cachedReference = referenceCache[fileName];
+    return cachedReference ? siyuanAPI.getDocUrl(cachedReference.doc_id) : null;
   };
 
   // 获取文件图标
@@ -235,9 +341,8 @@ export default function FindAssets() {
     <List
       isLoading={isLoading}
       searchText={searchText}
-      onSearchTextChange={setSearchText}
-      searchBarPlaceholder={`搜索 assets 附件文件... (共 ${totalFiles} 个文件，${formatFileSize(totalSize)})`}
-      throttle
+      onSearchTextChange={handleSearchTextChange}
+      searchBarPlaceholder={`搜索 assets 附件文件... (共 ${totalFiles} 个文件，显示前 ${Math.min(maxDisplayItems, totalFiles)} 个，${formatFileSize(totalSize)})`}
       searchBarAccessory={
         <List.Dropdown
           tooltip="按文件类型筛选"
@@ -291,7 +396,7 @@ export default function FindAssets() {
           }
         />
       ) : (
-        assets.map((file) => (
+        displayAssets.map((file) => (
           <List.Item
             key={file.fullPath}
             icon={getFileIcon(file)}
@@ -313,14 +418,20 @@ export default function FindAssets() {
                     target={file.fullPath}
                     shortcut={{ modifiers: ["cmd"], key: "o" }}
                   />
-                  {file.referencedBy && file.referencedByDocId && (
-                    <Action.OpenInBrowser
-                      title="在 SiYuan 中打开引用文档"
-                      icon={Icon.Document}
-                      url={siyuanAPI.getDocUrl(file.referencedByDocId)}
-                      shortcut={{ modifiers: ["cmd"], key: "r" }}
-                    />
-                  )}
+                  {(() => {
+                    // 当用户查看Action面板时才触发懒加载
+                    handleItemVisible(file.name);
+                    
+                    const referenceUrl = getReferenceUrl(file.name);
+                    return referenceUrl ? (
+                      <Action.OpenInBrowser
+                        title="在 Siyuan 中打开引用文档"
+                        icon={Icon.Document}
+                        url={referenceUrl}
+                        shortcut={{ modifiers: ["cmd"], key: "r" }}
+                      />
+                    ) : null;
+                  })()}
                   <Action.ShowInFinder
                     title="在 Finder 中显示"
                     path={file.fullPath}
@@ -374,6 +485,13 @@ export default function FindAssets() {
             }
           />
         ))
+      )}
+      {assets.length > maxDisplayItems && (
+        <List.Item
+          title={`还有 ${assets.length - maxDisplayItems} 个文件未显示`}
+          subtitle="请使用搜索功能缩小范围"
+          icon={{ source: Icon.Info, tintColor: Color.Orange }}
+        />
       )}
     </List>
   );

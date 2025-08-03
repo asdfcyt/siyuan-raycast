@@ -1448,27 +1448,32 @@ class SiYuanAPI {
     return "other";
   }
 
-  // 查找引用特定附件的文档
-  async findDocumentsReferencingAsset(
+  // 查找单个附件的引用信息（简化版本）
+  async findAssetReference(
     assetName: string,
-  ): Promise<
-    { doc_id: string; doc_title: string; doc_path: string; updated: string }[]
-  > {
-    console.log(`查找引用附件的文档: ${assetName}`);
+  ): Promise<{
+    doc_id: string;
+    doc_title: string;
+    doc_path: string;
+    updated: string;
+  } | null> {
+    console.log(`查找附件引用信息: ${assetName}`);
 
     try {
-      // 搜索包含该附件引用的块
+      // 使用简单的查询，只查找最新的一个引用
       const sql = `
-        SELECT DISTINCT d.id as doc_id, d.content as doc_title, d.hpath as doc_path, d.updated
+        SELECT DISTINCT 
+          d.id as doc_id, 
+          d.content as doc_title, 
+          d.hpath as doc_path, 
+          d.updated
         FROM blocks b
         LEFT JOIN blocks d ON b.root_id = d.id AND d.type = 'd'
-        WHERE (b.content LIKE '%assets/${assetName}%' OR b.markdown LIKE '%assets/${assetName}%')
-          AND d.id IS NOT NULL
+        WHERE d.id IS NOT NULL 
+          AND (b.content LIKE '%assets/${assetName}%' OR b.markdown LIKE '%assets/${assetName}%')
         ORDER BY d.updated DESC
-        LIMIT 5
+        LIMIT 1
       `;
-
-      console.log("引用文档查询SQL:", sql);
 
       const response = await this.request<
         Array<{
@@ -1479,10 +1484,10 @@ class SiYuanAPI {
         }>
       >("/query/sql", { stmt: sql });
 
-      return response || [];
+      return response && response.length > 0 ? response[0] : null;
     } catch (error) {
       console.error("查找引用文档失败:", error);
-      return [];
+      return null;
     }
   }
 
@@ -1512,24 +1517,17 @@ class SiYuanAPI {
       return nameMatch && typeMatch;
     });
 
-    // 为每个文件查找引用的文档信息
-    const filesWithRefs = await Promise.all(
-      filteredFiles.map(async (file) => {
-        const referencingDocs = await this.findDocumentsReferencingAsset(
-          file.name,
-        );
-        const latestDoc =
-          referencingDocs.length > 0 ? referencingDocs[0] : null;
-
-        return {
-          ...file,
-          referencedBy: latestDoc ? latestDoc.doc_title : null,
-          referencedByPath: latestDoc ? latestDoc.doc_path : null,
-          referencedByDocId: latestDoc ? latestDoc.doc_id : null,
-          lastReferencedTime: latestDoc ? latestDoc.updated : null,
-        };
-      }),
-    );
+    // 只返回基本文件信息，不立即查询引用（性能优化）
+    // 引用信息将在用户真正需要时懒加载
+    const filesWithRefs = filteredFiles.map((file) => {
+      return {
+        ...file,
+        referencedBy: null,
+        referencedByPath: null,
+        referencedByDocId: null,
+        lastReferencedTime: null,
+      };
+    });
 
     return filesWithRefs;
   }
