@@ -271,7 +271,7 @@ export default function QuickAddNote(
         return;
       }
 
-      await siyuanAPI.addToDocument(mostRecentDocId, content, true); // 默认添加时间戳
+      await siyuanAPI.addToDocument(mostRecentDocId, content, addTimestamp || false); // 使用用户设置的时间戳选项
 
       await closeMainWindow({
         clearRootSearch: true,
@@ -289,7 +289,7 @@ export default function QuickAddNote(
         `❌ 添加失败: ${error instanceof Error ? error.message : "未知错误"}`,
       );
     }
-  }, []);
+  }, [addTimestamp]);
 
   // 如果是快速模式，立即执行添加操作
   useEffect(() => {
