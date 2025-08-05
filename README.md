@@ -19,9 +19,11 @@
    - **SiYuan Server URL**: 思源笔记服务器地址 (默认: http://127.0.0.1:6806)
    - **API Token**: API访问令牌 (如果启用了认证)
    - **Default Notebook ID**: 默认笔记本ID
-   - **Daily Note Path**: 每日笔记路径模板 (默认: /daily/{{date}})
-     * 支持思源笔记标准模板格式：如 `/daily note/{{now | date "2006/01"}}/{{now | date "2006-01-02"}}`
-     * 简化格式：`笔记本名称/daily/{{date}}` (会自动转换为 YYYY-MM-DD 格式)
+   - **Daily Note Path**: 每日笔记路径模板 (默认: 收集箱/daily note/{{year}}/{{month}}/{{date}})
+     * 格式：`笔记本名称/文档路径`
+     * 笔记本名称：在SiYuan中已存在的笔记本名称（如："收集箱"）
+     * 文档路径：在该笔记本内的路径（如：`daily note/{{year}}/{{month}}/{{date}}`）
+     * 支持变量：`{{year}}`、`{{month}}`、`{{day}}`、`{{date}}`（YYYY-MM-DD格式）
    - **Workspace Path**: 思源笔记工作空间目录路径 (例如: /Users/username/Documents/SiYuan)
 
 ## 工作空间路径配置

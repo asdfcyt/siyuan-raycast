@@ -430,7 +430,7 @@ class SiYuanAPI {
 
   // 创建文档
   async createNote(params: CreateNoteParams): Promise<string> {
-    const response = await this.request<{ id: string }>(
+    const docId = await this.request<string>(
       "/filetree/createDocWithMd",
       {
         notebook: params.notebook,
@@ -439,7 +439,40 @@ class SiYuanAPI {
       },
     );
 
-    return response.id;
+    return docId;
+  }
+
+  // 创建每日笔记（带特殊属性）
+  async createDailyNote(params: CreateNoteParams & { date: string }): Promise<string> {
+    try {
+      // 使用SiYuan API创建文档
+      const docId = await this.request<string>(
+        "/filetree/createDocWithMd",
+        {
+          notebook: params.notebook,
+          path: params.path,
+          markdown: params.content || "",
+        },
+      );
+
+      console.log("每日笔记文档创建成功:", docId);
+
+      // 根据SiYuan API文档，为每日笔记添加自定义属性
+      try {
+        const dailyNoteAttr = `custom-dailynote-${params.date.replace(/-/g, '')}`;
+        await this.setBlockAttribute(docId, dailyNoteAttr, "true");
+        await this.setBlockAttribute(docId, "custom-dailynote", params.date);
+        console.log("每日笔记属性设置成功:", dailyNoteAttr);
+      } catch (attrError) {
+        console.warn("设置每日笔记属性失败:", attrError);
+        // 不影响主要功能，继续执行
+      }
+
+      return docId;
+    } catch (error) {
+      console.error("创建每日笔记失败:", error);
+      throw error;
+    }
   }
 
   // 创建带模板的文档
@@ -919,8 +952,77 @@ class SiYuanAPI {
     return `${this.preferences.siyuanUrl}/stage/build/desktop/?id=${docId}`;
   }
 
+  // 根据笔记本名称查找笔记本ID
+  async findNotebookByName(notebookName: string): Promise<string | null> {
+    try {
+      const notebooks = await this.getNotebooks();
+      const matchedNotebook = notebooks.find(nb => nb.name === notebookName);
+      
+      if (matchedNotebook) {
+        console.log(`找到笔记本: ${notebookName} -> ${matchedNotebook.id}`);
+        return matchedNotebook.id;
+      }
+      
+      console.log(`未找到名为 "${notebookName}" 的笔记本`);
+      return null;
+    } catch (error) {
+      console.error("查找笔记本失败:", error);
+      return null;
+    }
+  }
+
+  // 解析每日笔记路径配置，分离笔记本名称和文档路径
+  async parseDailyNotePath(template: string): Promise<{
+    notebookId: string | null;
+    documentPath: string;
+  }> {
+    console.log("解析每日笔记路径:", template);
+    
+    // 清理路径，移除前导斜杠
+    const cleanTemplate = template.startsWith('/') ? template.substring(1) : template;
+    const pathParts = cleanTemplate.split('/').filter(part => part.trim());
+    
+    if (pathParts.length === 0) {
+      return {
+        notebookId: null,
+        documentPath: '/'
+      };
+    }
+
+    const firstPart = pathParts[0];
+    
+    // 尝试将第一部分作为笔记本名称查找
+    const notebookId = await this.findNotebookByName(firstPart);
+    
+    if (notebookId) {
+      // 如果找到了笔记本，剩余部分就是文档在笔记本内的路径
+      const remainingParts = pathParts.slice(1);
+      const documentPath = remainingParts.length > 0 ? `/${remainingParts.join('/')}` : '/';
+      
+      console.log(`解析结果:`);
+      console.log(`  笔记本名称: "${firstPart}"`);
+      console.log(`  笔记本ID: ${notebookId}`);
+      console.log(`  文档路径: "${documentPath}" (笔记本内路径)`);
+      
+      return {
+        notebookId,
+        documentPath
+      };
+    } else {
+      // 如果没找到笔记本，整个路径都是文档路径，使用默认笔记本
+      console.log(`未找到名为 "${firstPart}" 的笔记本，将使用默认笔记本`);
+      return {
+        notebookId: null,
+        documentPath: `/${cleanTemplate}`
+      };
+    }
+  }
+
   // 渲染每日笔记路径模板
-  async renderDailyNotePath(template: string): Promise<string> {
+  async renderDailyNotePath(template: string): Promise<{
+    notebookId: string | null;
+    documentPath: string;
+  }> {
     // 直接使用本地日期替换，更稳定可靠
     const today = new Date();
     const year = today.getFullYear();
@@ -928,15 +1030,49 @@ class SiYuanAPI {
     const day = String(today.getDate()).padStart(2, "0");
     const dateStr = `${year}-${month}-${day}`;
 
-    const result = template
+    // 扩展模板替换，支持更多的日期格式和分层目录结构
+    let renderedTemplate = template
       .replace(/\{\{now \| date "2006"\}\}/g, String(year))
       .replace(/\{\{now \| date "01"\}\}/g, month)
       .replace(/\{\{now \| date "02"\}\}/g, day)
       .replace(/\{\{now \| date "2006-01-02"\}\}/g, dateStr)
       .replace(/\{\{now \| date "2006\/01"\}\}/g, `${year}/${month}`)
+      .replace(/\{\{year\}\}/g, String(year))
+      .replace(/\{\{month\}\}/g, month)
+      .replace(/\{\{day\}\}/g, day)
       .replace(/\{\{date\}\}/g, dateStr);
 
-    console.log("渲染后的每日笔记路径:", result);
+    // 如果是默认的简化模板，转换为完整的分层路径
+    if (renderedTemplate === `/daily note/${dateStr}`) {
+      // 将默认路径转换为正确的年/月分层结构
+      renderedTemplate = `/daily note/${year}/${month}/${dateStr}`;
+    }
+    
+    // 处理其他可能的简化格式，确保生成正确的分层路径
+    const pathParts = renderedTemplate.split('/').filter(part => part.trim());
+    if (pathParts.length >= 2) {
+      const lastPart = pathParts[pathParts.length - 1];
+      // 如果最后一部分是日期格式 YYYY-MM-DD，确保有年/月分层
+      if (lastPart.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const beforeLast = pathParts.slice(0, -1);
+        // 检查是否已经有年月分层，如果没有则添加
+        if (!pathParts.includes(String(year)) || !pathParts.includes(month)) {
+          // 重构路径以包含年/月分层
+          beforeLast.push(String(year));
+          beforeLast.push(month);
+          beforeLast.push(lastPart);
+          renderedTemplate = '/' + beforeLast.join('/');
+        }
+      }
+    }
+
+    console.log("原始模板:", template);
+    console.log("渲染后的每日笔记路径模板:", renderedTemplate);
+    
+    // 解析路径，分离笔记本和文档路径
+    const result = await this.parseDailyNotePath(renderedTemplate);
+    console.log("最终解析结果:", result);
+    
     return result;
   }
 
@@ -946,18 +1082,75 @@ class SiYuanAPI {
     // 使用本地时区的日期，避免UTC时区问题
     const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
-    // 直接通过SQL查询搜索包含今日日期的文档，更稳定可靠
+    // 首先解析每日笔记路径配置
+    const { notebookId: configuredNotebookId, documentPath } = await this.renderDailyNotePath(
+      this.preferences.dailyNotePath,
+    );
+
+    // 确定要使用的笔记本ID
+    let finalNotebookId = configuredNotebookId || this.preferences.notebookId;
+    
+    if (!finalNotebookId) {
+      const notebooks = await this.getNotebooks();
+      if (notebooks.length === 0) {
+        throw new Error("未找到任何可用的笔记本");
+      }
+      // 如果没有配置笔记本，使用第一个笔记本
+      finalNotebookId = notebooks[0].id;
+      console.log(`使用默认笔记本: ${notebooks[0].name} (${finalNotebookId})`);
+    }
+    
+    if (!finalNotebookId) {
+      throw new Error("无法确定目标笔记本");
+    }
+
+    console.log(`最终使用的笔记本ID: ${finalNotebookId}`);
+    console.log(`文档路径: ${documentPath}`);
+
+    // 优化搜索逻辑，使用更精确的路径匹配
     try {
-      const sql = `SELECT * FROM blocks WHERE type='d' AND (content LIKE '%${dateStr}%' OR hpath LIKE '%${dateStr}%') ORDER BY updated DESC LIMIT 5`;
-      const response = await this.request<SiYuanBlock[]>("/query/sql", {
-        stmt: sql,
+      // 构建更精确的路径搜索条件
+      const searchPaths = [
+        `%${dateStr}%`, // 精确日期匹配
+        `%${dateStr}`, // 以日期结尾
+        `${dateStr}%`, // 以日期开头
+      ];
+      
+      // 在确定的笔记本中搜索
+      const notebookFilter = `AND box = '${finalNotebookId}'`;
+      
+      // 首先尝试通过hpath精确匹配
+      for (const searchPath of searchPaths) {
+        const sql = `SELECT * FROM blocks WHERE type='d' AND hpath LIKE '${searchPath}' ${notebookFilter} ORDER BY updated DESC LIMIT 3`;
+        console.log("搜索每日笔记SQL:", sql);
+        
+        const response = await this.request<SiYuanBlock[]>("/query/sql", {
+          stmt: sql,
+        });
+
+        if (response && response.length > 0) {
+          // 找到了可能的今日笔记，进一步验证
+          for (const block of response) {
+            if (block.hpath && (block.hpath.includes(dateStr) || block.content?.includes(dateStr))) {
+              console.log("通过SQL找到每日笔记:", block.id, "路径:", block.hpath);
+              return block.id;
+            }
+          }
+        }
+      }
+
+      // 如果精确匹配失败，尝试内容匹配
+      const contentSql = `SELECT * FROM blocks WHERE type='d' AND content LIKE '%${dateStr}%' ${notebookFilter} ORDER BY updated DESC LIMIT 5`;
+      console.log("通过内容搜索每日笔记SQL:", contentSql);
+      
+      const contentResponse = await this.request<SiYuanBlock[]>("/query/sql", {
+        stmt: contentSql,
       });
 
-      if (response && response.length > 0) {
-        // 找到了可能的今日笔记，验证是否真的是今日笔记
-        for (const block of response) {
-          if (block.hpath && block.hpath.includes(dateStr)) {
-            console.log("通过SQL找到每日笔记:", block.id);
+      if (contentResponse && contentResponse.length > 0) {
+        for (const block of contentResponse) {
+          if (block.content && block.content.includes(`每日笔记 ${dateStr}`)) {
+            console.log("通过内容找到每日笔记:", block.id, "标题:", block.content);
             return block.id;
           }
         }
@@ -967,35 +1160,34 @@ class SiYuanAPI {
     }
 
     // 没找到，创建新的每日笔记
-    const notebooks = await this.getNotebooks();
-    const defaultNotebook = this.preferences.notebookId || notebooks[0]?.id;
+    console.log("创建新的每日笔记");
+    console.log("目标笔记本ID:", finalNotebookId);
+    console.log("文档路径:", documentPath);
+    
+    try {
+      // 创建每日笔记，确保添加daily note特有的属性
+      const docId = await this.createDailyNote({
+        notebook: finalNotebookId,
+        path: documentPath,
+        title: `每日笔记 ${dateStr}`,
+        content: `> 📅 ${new Date().toLocaleDateString(
+          "zh-CN",
+          {
+            year: "numeric",
+            month: "long", 
+            day: "numeric",
+            weekday: "long",
+          },
+        )}\n\n`,
+        date: dateStr,
+      });
 
-    if (!defaultNotebook) {
-      throw new Error("未找到可用的笔记本");
+      console.log("成功创建每日笔记:", docId);
+      return docId;
+    } catch (error) {
+      console.error("创建每日笔记失败:", error);
+      throw new Error(`创建每日笔记失败: ${error instanceof Error ? error.message : "未知错误"}`);
     }
-
-    // 渲染每日笔记路径
-    const dailyPath = await this.renderDailyNotePath(
-      this.preferences.dailyNotePath,
-    );
-
-    console.log("创建新的每日笔记，路径:", dailyPath);
-    const docId = await this.createNote({
-      notebook: defaultNotebook,
-      path: dailyPath,
-      title: `每日笔记 ${dateStr}`,
-      content: `# 每日笔记 ${dateStr}\n\n> 📅 ${new Date().toLocaleDateString(
-        "zh-CN",
-        {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-          weekday: "long",
-        },
-      )}\n\n`,
-    });
-
-    return docId;
   }
 
   // 添加内容到每日笔记

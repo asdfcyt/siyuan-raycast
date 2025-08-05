@@ -111,8 +111,8 @@
       "type": "textfield",
       "required": false,
       "title": "每日笔记路径模板",
-      "description": "每日笔记路径模板 (e.g., 笔记本名称/daily/{{date}})",
-      "default": "/daily note/{{date}}"
+      "description": "每日笔记路径模板，格式：笔记本名称/文档路径 (e.g., 收集箱/daily note/{{year}}/{{month}}/{{date}})",
+      "default": "收集箱/daily note/{{year}}/{{month}}/{{date}}"
     },
     {
       "name": "workspacePath",
