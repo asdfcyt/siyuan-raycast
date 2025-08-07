@@ -1,7 +1,7 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "siyuan-notes",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "title": "Siyuan Notes",
   "description": "思源笔记扩展，支持搜索、创建笔记和每日记录。",
   "icon": "icon.png",

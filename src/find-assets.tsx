@@ -32,7 +32,7 @@ export default function FindAssets() {
 
   // 使用防抖来减少频繁查询
   const [debouncedSearchText, setDebouncedSearchText] = useState(searchText);
-  
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchText(searchText);
@@ -97,7 +97,7 @@ export default function FindAssets() {
   const { totalFiles, totalSize } = useMemo(() => {
     return {
       totalFiles: assets.length,
-      totalSize: assets.reduce((sum, file) => sum + file.size, 0)
+      totalSize: assets.reduce((sum, file) => sum + file.size, 0),
     };
   }, [assets]);
 
@@ -143,7 +143,17 @@ export default function FindAssets() {
   };
 
   // 引用信息缓存
-  const [referenceCache, setReferenceCache] = useState<Record<string, { doc_id: string; doc_title: string; doc_path: string; updated: string } | null>>({});
+  const [referenceCache, setReferenceCache] = useState<
+    Record<
+      string,
+      {
+        doc_id: string;
+        doc_title: string;
+        doc_path: string;
+        updated: string;
+      } | null
+    >
+  >({});
   const [loadingReferences, setLoadingReferences] = useState<Set<string>>(
     new Set(),
   );
@@ -156,7 +166,10 @@ export default function FindAssets() {
 
   // 懒加载引用信息 - 优化版本
   const loadReferenceInfo = async (fileName: string) => {
-    if (referenceCache[fileName] !== undefined || loadingReferences.has(fileName)) {
+    if (
+      referenceCache[fileName] !== undefined ||
+      loadingReferences.has(fileName)
+    ) {
       return; // 已加载或正在加载
     }
 
@@ -189,7 +202,7 @@ export default function FindAssets() {
         return newSet;
       });
       setActiveRequests((prev) => prev - 1);
-      
+
       // 处理队列中的下一个请求
       setRequestQueue((queue) => {
         if (queue.length > 0) {
@@ -421,7 +434,7 @@ export default function FindAssets() {
                   {(() => {
                     // 当用户查看Action面板时才触发懒加载
                     handleItemVisible(file.name);
-                    
+
                     const referenceUrl = getReferenceUrl(file.name);
                     return referenceUrl ? (
                       <Action.OpenInBrowser

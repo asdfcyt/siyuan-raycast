@@ -430,36 +430,32 @@ class SiYuanAPI {
 
   // 创建文档
   async createNote(params: CreateNoteParams): Promise<string> {
-    const docId = await this.request<string>(
-      "/filetree/createDocWithMd",
-      {
-        notebook: params.notebook,
-        path: params.path,
-        markdown: params.content || "",
-      },
-    );
+    const docId = await this.request<string>("/filetree/createDocWithMd", {
+      notebook: params.notebook,
+      path: params.path,
+      markdown: params.content || "",
+    });
 
     return docId;
   }
 
   // 创建每日笔记（带特殊属性）
-  async createDailyNote(params: CreateNoteParams & { date: string }): Promise<string> {
+  async createDailyNote(
+    params: CreateNoteParams & { date: string },
+  ): Promise<string> {
     try {
       // 使用SiYuan API创建文档
-      const docId = await this.request<string>(
-        "/filetree/createDocWithMd",
-        {
-          notebook: params.notebook,
-          path: params.path,
-          markdown: params.content || "",
-        },
-      );
+      const docId = await this.request<string>("/filetree/createDocWithMd", {
+        notebook: params.notebook,
+        path: params.path,
+        markdown: params.content || "",
+      });
 
       console.log("每日笔记文档创建成功:", docId);
 
       // 根据SiYuan API文档，为每日笔记添加自定义属性
       try {
-        const dailyNoteAttr = `custom-dailynote-${params.date.replace(/-/g, '')}`;
+        const dailyNoteAttr = `custom-dailynote-${params.date.replace(/-/g, "")}`;
         await this.setBlockAttribute(docId, dailyNoteAttr, "true");
         await this.setBlockAttribute(docId, "custom-dailynote", params.date);
         console.log("每日笔记属性设置成功:", dailyNoteAttr);
@@ -956,13 +952,13 @@ class SiYuanAPI {
   async findNotebookByName(notebookName: string): Promise<string | null> {
     try {
       const notebooks = await this.getNotebooks();
-      const matchedNotebook = notebooks.find(nb => nb.name === notebookName);
-      
+      const matchedNotebook = notebooks.find((nb) => nb.name === notebookName);
+
       if (matchedNotebook) {
         console.log(`找到笔记本: ${notebookName} -> ${matchedNotebook.id}`);
         return matchedNotebook.id;
       }
-      
+
       console.log(`未找到名为 "${notebookName}" 的笔记本`);
       return null;
     } catch (error) {
@@ -977,43 +973,46 @@ class SiYuanAPI {
     documentPath: string;
   }> {
     console.log("解析每日笔记路径:", template);
-    
+
     // 清理路径，移除前导斜杠
-    const cleanTemplate = template.startsWith('/') ? template.substring(1) : template;
-    const pathParts = cleanTemplate.split('/').filter(part => part.trim());
-    
+    const cleanTemplate = template.startsWith("/")
+      ? template.substring(1)
+      : template;
+    const pathParts = cleanTemplate.split("/").filter((part) => part.trim());
+
     if (pathParts.length === 0) {
       return {
         notebookId: null,
-        documentPath: '/'
+        documentPath: "/",
       };
     }
 
     const firstPart = pathParts[0];
-    
+
     // 尝试将第一部分作为笔记本名称查找
     const notebookId = await this.findNotebookByName(firstPart);
-    
+
     if (notebookId) {
       // 如果找到了笔记本，剩余部分就是文档在笔记本内的路径
       const remainingParts = pathParts.slice(1);
-      const documentPath = remainingParts.length > 0 ? `/${remainingParts.join('/')}` : '/';
-      
+      const documentPath =
+        remainingParts.length > 0 ? `/${remainingParts.join("/")}` : "/";
+
       console.log(`解析结果:`);
       console.log(`  笔记本名称: "${firstPart}"`);
       console.log(`  笔记本ID: ${notebookId}`);
       console.log(`  文档路径: "${documentPath}" (笔记本内路径)`);
-      
+
       return {
         notebookId,
-        documentPath
+        documentPath,
       };
     } else {
       // 如果没找到笔记本，整个路径都是文档路径，使用默认笔记本
       console.log(`未找到名为 "${firstPart}" 的笔记本，将使用默认笔记本`);
       return {
         notebookId: null,
-        documentPath: `/${cleanTemplate}`
+        documentPath: `/${cleanTemplate}`,
       };
     }
   }
@@ -1047,9 +1046,9 @@ class SiYuanAPI {
       // 将默认路径转换为正确的年/月分层结构
       renderedTemplate = `/daily note/${year}/${month}/${dateStr}`;
     }
-    
+
     // 处理其他可能的简化格式，确保生成正确的分层路径
-    const pathParts = renderedTemplate.split('/').filter(part => part.trim());
+    const pathParts = renderedTemplate.split("/").filter((part) => part.trim());
     if (pathParts.length >= 2) {
       const lastPart = pathParts[pathParts.length - 1];
       // 如果最后一部分是日期格式 YYYY-MM-DD，确保有年/月分层
@@ -1061,18 +1060,18 @@ class SiYuanAPI {
           beforeLast.push(String(year));
           beforeLast.push(month);
           beforeLast.push(lastPart);
-          renderedTemplate = '/' + beforeLast.join('/');
+          renderedTemplate = "/" + beforeLast.join("/");
         }
       }
     }
 
     console.log("原始模板:", template);
     console.log("渲染后的每日笔记路径模板:", renderedTemplate);
-    
+
     // 解析路径，分离笔记本和文档路径
     const result = await this.parseDailyNotePath(renderedTemplate);
     console.log("最终解析结果:", result);
-    
+
     return result;
   }
 
@@ -1083,13 +1082,12 @@ class SiYuanAPI {
     const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
     // 首先解析每日笔记路径配置
-    const { notebookId: configuredNotebookId, documentPath } = await this.renderDailyNotePath(
-      this.preferences.dailyNotePath,
-    );
+    const { notebookId: configuredNotebookId, documentPath } =
+      await this.renderDailyNotePath(this.preferences.dailyNotePath);
 
     // 确定要使用的笔记本ID
     let finalNotebookId = configuredNotebookId || this.preferences.notebookId;
-    
+
     if (!finalNotebookId) {
       const notebooks = await this.getNotebooks();
       if (notebooks.length === 0) {
@@ -1099,7 +1097,7 @@ class SiYuanAPI {
       finalNotebookId = notebooks[0].id;
       console.log(`使用默认笔记本: ${notebooks[0].name} (${finalNotebookId})`);
     }
-    
+
     if (!finalNotebookId) {
       throw new Error("无法确定目标笔记本");
     }
@@ -1115,15 +1113,15 @@ class SiYuanAPI {
         `%${dateStr}`, // 以日期结尾
         `${dateStr}%`, // 以日期开头
       ];
-      
+
       // 在确定的笔记本中搜索
       const notebookFilter = `AND box = '${finalNotebookId}'`;
-      
+
       // 首先尝试通过hpath精确匹配
       for (const searchPath of searchPaths) {
         const sql = `SELECT * FROM blocks WHERE type='d' AND hpath LIKE '${searchPath}' ${notebookFilter} ORDER BY updated DESC LIMIT 3`;
         console.log("搜索每日笔记SQL:", sql);
-        
+
         const response = await this.request<SiYuanBlock[]>("/query/sql", {
           stmt: sql,
         });
@@ -1131,8 +1129,17 @@ class SiYuanAPI {
         if (response && response.length > 0) {
           // 找到了可能的今日笔记，进一步验证
           for (const block of response) {
-            if (block.hpath && (block.hpath.includes(dateStr) || block.content?.includes(dateStr))) {
-              console.log("通过SQL找到每日笔记:", block.id, "路径:", block.hpath);
+            if (
+              block.hpath &&
+              (block.hpath.includes(dateStr) ||
+                block.content?.includes(dateStr))
+            ) {
+              console.log(
+                "通过SQL找到每日笔记:",
+                block.id,
+                "路径:",
+                block.hpath,
+              );
               return block.id;
             }
           }
@@ -1142,7 +1149,7 @@ class SiYuanAPI {
       // 如果精确匹配失败，尝试内容匹配
       const contentSql = `SELECT * FROM blocks WHERE type='d' AND content LIKE '%${dateStr}%' ${notebookFilter} ORDER BY updated DESC LIMIT 5`;
       console.log("通过内容搜索每日笔记SQL:", contentSql);
-      
+
       const contentResponse = await this.request<SiYuanBlock[]>("/query/sql", {
         stmt: contentSql,
       });
@@ -1150,7 +1157,12 @@ class SiYuanAPI {
       if (contentResponse && contentResponse.length > 0) {
         for (const block of contentResponse) {
           if (block.content && block.content.includes(`每日笔记 ${dateStr}`)) {
-            console.log("通过内容找到每日笔记:", block.id, "标题:", block.content);
+            console.log(
+              "通过内容找到每日笔记:",
+              block.id,
+              "标题:",
+              block.content,
+            );
             return block.id;
           }
         }
@@ -1163,22 +1175,19 @@ class SiYuanAPI {
     console.log("创建新的每日笔记");
     console.log("目标笔记本ID:", finalNotebookId);
     console.log("文档路径:", documentPath);
-    
+
     try {
       // 创建每日笔记，确保添加daily note特有的属性
       const docId = await this.createDailyNote({
         notebook: finalNotebookId,
         path: documentPath,
         title: `每日笔记 ${dateStr}`,
-        content: `> 📅 ${new Date().toLocaleDateString(
-          "zh-CN",
-          {
-            year: "numeric",
-            month: "long", 
-            day: "numeric",
-            weekday: "long",
-          },
-        )}\n\n`,
+        content: `> 📅 ${new Date().toLocaleDateString("zh-CN", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          weekday: "long",
+        })}\n\n`,
         date: dateStr,
       });
 
@@ -1186,7 +1195,9 @@ class SiYuanAPI {
       return docId;
     } catch (error) {
       console.error("创建每日笔记失败:", error);
-      throw new Error(`创建每日笔记失败: ${error instanceof Error ? error.message : "未知错误"}`);
+      throw new Error(
+        `创建每日笔记失败: ${error instanceof Error ? error.message : "未知错误"}`,
+      );
     }
   }
 
@@ -1232,7 +1243,9 @@ class SiYuanAPI {
     try {
       await this.getBlockInfo(documentId);
     } catch (error) {
-      throw new Error(`文档不存在或无法访问: ${error instanceof Error ? error.message : "未知错误"}`);
+      throw new Error(
+        `文档不存在或无法访问: ${error instanceof Error ? error.message : "未知错误"}`,
+      );
     }
 
     let formattedContent = content.trim();
@@ -1690,9 +1703,7 @@ class SiYuanAPI {
   }
 
   // 查找单个附件的引用信息（简化版本）
-  async findAssetReference(
-    assetName: string,
-  ): Promise<{
+  async findAssetReference(assetName: string): Promise<{
     doc_id: string;
     doc_title: string;
     doc_path: string;
@@ -1781,14 +1792,14 @@ class SiYuanAPI {
   ): Promise<void> {
     try {
       console.log(`设置块属性: ${blockId}, ${name}=${value}`);
-      
+
       await this.request("/attr/setBlockAttrs", {
         id: blockId,
         attrs: {
           [name]: value,
         },
       });
-      
+
       console.log(`成功设置块属性: ${blockId}`);
     } catch (error) {
       console.error("设置块属性失败:", error);
@@ -1800,14 +1811,14 @@ class SiYuanAPI {
   async getBlockAttributes(blockId: string): Promise<Record<string, string>> {
     try {
       console.log(`获取块属性: ${blockId}`);
-      
+
       const response = await this.request<Record<string, string>>(
         "/attr/getBlockAttrs",
         {
           id: blockId,
         },
       );
-      
+
       return response || {};
     } catch (error) {
       console.error("获取块属性失败:", error);
@@ -1826,13 +1837,13 @@ class SiYuanAPI {
       const humanReadableTime = this.formatHumanReadableTime(currentTimestamp);
       const referenceKey = `custom-reference-${Date.now()}`;
       const referenceValue = `${appName}|${humanReadableTime}|${currentTimestamp}`;
-      
+
       // 首先获取现有的引用记录
       const existingAttrs = await this.getBlockAttributes(blockId);
       const existingReferences = Object.keys(existingAttrs)
         .filter((key) => key.startsWith("custom-reference-"))
         .map((key) => existingAttrs[key]);
-      
+
       // 检查是否已经有相同应用的最近引用（5分钟内）
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
       const hasRecentReference = existingReferences.some((ref) => {
@@ -1841,13 +1852,13 @@ class SiYuanAPI {
         const refIsoTime = parts[2] || parts[1]; // 兼容旧格式
         return refApp === appName && refIsoTime > fiveMinutesAgo;
       });
-      
+
       if (!hasRecentReference) {
         await this.setBlockAttribute(blockId, referenceKey, referenceValue);
-        
+
         // 为块添加书签属性
         await this.addBookmarkToBlock(blockId);
-        
+
         console.log(`为块 ${blockId} 添加引用记录: ${appName}`);
       } else {
         console.log(`块 ${blockId} 最近已有 ${appName} 的引用记录，跳过添加`);
@@ -1859,7 +1870,9 @@ class SiYuanAPI {
   }
 
   // 获取块的所有引用记录
-  async getBlockReferences(blockId: string): Promise<Array<{ app: string; timestamp: string; isoTimestamp?: string }>> {
+  async getBlockReferences(
+    blockId: string,
+  ): Promise<Array<{ app: string; timestamp: string; isoTimestamp?: string }>> {
     try {
       const attrs = await this.getBlockAttributes(blockId);
       const references = Object.keys(attrs)
@@ -1869,11 +1882,11 @@ class SiYuanAPI {
           const app = parts[0];
           const humanTime = parts[1];
           const isoTime = parts[2] || parts[1]; // 兼容旧格式
-          
-          return { 
-            app, 
+
+          return {
+            app,
             timestamp: humanTime,
-            isoTimestamp: isoTime
+            isoTimestamp: isoTime,
           };
         })
         .sort((a, b) => {
@@ -1882,7 +1895,7 @@ class SiYuanAPI {
           const timeB = (b as any).isoTimestamp || b.timestamp;
           return timeB.localeCompare(timeA);
         });
-      
+
       return references;
     } catch (error) {
       console.error("获取引用记录失败:", error);
@@ -1894,12 +1907,12 @@ class SiYuanAPI {
   private formatHumanReadableTime(isoString: string): string {
     const date = new Date(isoString);
     const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    const seconds = String(date.getSeconds()).padStart(2, "0");
+
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   }
 
@@ -1907,7 +1920,7 @@ class SiYuanAPI {
   private async addBookmarkToBlock(blockId: string): Promise<void> {
     try {
       console.log(`为块 ${blockId} 添加书签属性`);
-      
+
       // 检查是否已经有书签属性
       const existingAttrs = await this.getBlockAttributes(blockId);
       if (existingAttrs.bookmark) {
@@ -1918,7 +1931,6 @@ class SiYuanAPI {
       // 添加书签属性
       await this.setBlockAttribute(blockId, "bookmark", "🔖 引用书签");
       console.log(`成功为块 ${blockId} 添加书签属性`);
-      
     } catch (error) {
       console.error(`为块 ${blockId} 添加书签属性失败:`, error);
       // 不抛出错误，避免影响主要功能
@@ -1930,9 +1942,11 @@ class SiYuanAPI {
     try {
       // 检查属性中的引用记录和书签属性
       const attrs = await this.getBlockAttributes(blockId);
-      const hasAttrRefs = Object.keys(attrs).some((key) => key.startsWith("custom-reference-"));
+      const hasAttrRefs = Object.keys(attrs).some((key) =>
+        key.startsWith("custom-reference-"),
+      );
       const hasBookmark = Boolean(attrs.bookmark);
-      
+
       // 如果有引用记录且有书签属性，返回true
       return hasAttrRefs && hasBookmark;
     } catch (error) {
@@ -1942,7 +1956,7 @@ class SiYuanAPI {
   }
 
   // 获取块的引用统计信息
-  async getReferenceStats(blockId: string): Promise<{ 
+  async getReferenceStats(blockId: string): Promise<{
     totalReferences: number;
     uniqueApps: number;
     lastReferenceTime?: string;
@@ -1950,24 +1964,25 @@ class SiYuanAPI {
   }> {
     try {
       const references = await this.getBlockReferences(blockId);
-      
+
       const appCounts: Record<string, number> = {};
-      references.forEach(ref => {
+      references.forEach((ref) => {
         appCounts[ref.app] = (appCounts[ref.app] || 0) + 1;
       });
 
       return {
         totalReferences: references.length,
         uniqueApps: Object.keys(appCounts).length,
-        lastReferenceTime: references.length > 0 ? references[0].timestamp : undefined,
-        appCounts
+        lastReferenceTime:
+          references.length > 0 ? references[0].timestamp : undefined,
+        appCounts,
       };
     } catch (error) {
       console.error("获取引用统计失败:", error);
       return {
         totalReferences: 0,
         uniqueApps: 0,
-        appCounts: {}
+        appCounts: {},
       };
     }
   }

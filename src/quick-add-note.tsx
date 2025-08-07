@@ -63,7 +63,7 @@ function DocumentSelector({ onSelect }: { onSelect: (docId: string) => void }) {
       setLoading(true);
       const searchResults = await siyuanAPI.searchNotes(query);
       // 只显示文档类型的结果
-      const docs = searchResults.blocks.filter(block => block.isDocument);
+      const docs = searchResults.blocks.filter((block) => block.isDocument);
       setRecentNotes(docs);
     } catch (error) {
       console.error("搜索文档失败:", error);
@@ -79,14 +79,14 @@ function DocumentSelector({ onSelect }: { onSelect: (docId: string) => void }) {
 
   const formatDate = (timestamp: string): string => {
     if (!timestamp || timestamp.length !== 14) return "无效时间";
-    
+
     try {
       const year = timestamp.substring(0, 4);
       const month = timestamp.substring(4, 6);
       const day = timestamp.substring(6, 8);
       const hour = timestamp.substring(8, 10);
       const minute = timestamp.substring(10, 12);
-      
+
       const date = new Date(`${year}-${month}-${day}T${hour}:${minute}:00`);
       const now = new Date();
       const diffMs = now.getTime() - date.getTime();
@@ -144,12 +144,14 @@ function DocumentSelector({ onSelect }: { onSelect: (docId: string) => void }) {
           />
         ))}
       </List.Section>
-      
+
       {recentNotes.length === 0 && !loading && (
         <List.EmptyView
           icon={Icon.Document}
           title="未找到文档"
-          description={searchText ? "尝试使用不同的关键词搜索" : "暂无最近访问的文档"}
+          description={
+            searchText ? "尝试使用不同的关键词搜索" : "暂无最近访问的文档"
+          }
         />
       )}
     </List>
@@ -164,13 +166,14 @@ export default function QuickAddNote(
   const [content, setContent] = useState<string>("");
   const [targetDocument, setTargetDocument] = useState<string>("");
   const [targetDocTitle, setTargetDocTitle] = useState<string>("");
-  const [showDocumentSelector, setShowDocumentSelector] = useState<boolean>(false);
+  const [showDocumentSelector, setShowDocumentSelector] =
+    useState<boolean>(false);
 
   // 使用 localStorage 保持时间戳设置，默认为 false
-  const { 
-    value: addTimestamp, 
-    setValue: setAddTimestamp 
-  } = useLocalStorage("quick-add-timestamp", false);
+  const { value: addTimestamp, setValue: setAddTimestamp } = useLocalStorage(
+    "quick-add-timestamp",
+    false,
+  );
 
   // 使用ref防止React Strict Mode下的重复执行
   const hasExecutedRef = useRef<boolean>(false);
@@ -222,7 +225,7 @@ export default function QuickAddNote(
       const mostRecentDocId = await siyuanAPI.getMostRecentDocumentId();
       if (mostRecentDocId) {
         const title = await getDocumentTitle(mostRecentDocId);
-        
+
         const toast = await showToast({
           style: Toast.Style.Animated,
           title: "正在添加到最近编辑的文档...",
@@ -230,7 +233,11 @@ export default function QuickAddNote(
         });
 
         // 直接添加内容到最近的文档
-        await siyuanAPI.addToDocument(mostRecentDocId, contentToAdd, addTimestamp || false);
+        await siyuanAPI.addToDocument(
+          mostRecentDocId,
+          contentToAdd,
+          addTimestamp || false,
+        );
 
         toast.style = Toast.Style.Success;
         toast.title = "✅ 已添加到最近编辑的文档";
@@ -258,38 +265,45 @@ export default function QuickAddNote(
   }, [getDocumentTitle, content, addTimestamp]);
 
   // 快速添加功能 - 自动选择最近文档
-  const handleQuickAdd = useCallback(async (content: string) => {
-    try {
-      // 获取最近编辑的文档
-      const mostRecentDocId = await siyuanAPI.getMostRecentDocumentId();
-      if (!mostRecentDocId) {
-        await showHUD("❌ 未找到最近的文档");
+  const handleQuickAdd = useCallback(
+    async (content: string) => {
+      try {
+        // 获取最近编辑的文档
+        const mostRecentDocId = await siyuanAPI.getMostRecentDocumentId();
+        if (!mostRecentDocId) {
+          await showHUD("❌ 未找到最近的文档");
+          await closeMainWindow({
+            clearRootSearch: true,
+            popToRootType: PopToRootType.Immediate,
+          });
+          return;
+        }
+
+        await siyuanAPI.addToDocument(
+          mostRecentDocId,
+          content,
+          addTimestamp || false,
+        ); // 使用用户设置的时间戳选项
+
         await closeMainWindow({
           clearRootSearch: true,
           popToRootType: PopToRootType.Immediate,
         });
-        return;
+
+        await showHUD("✅ 已添加到最近编辑的文档");
+      } catch (error) {
+        await closeMainWindow({
+          clearRootSearch: true,
+          popToRootType: PopToRootType.Immediate,
+        });
+
+        await showHUD(
+          `❌ 添加失败: ${error instanceof Error ? error.message : "未知错误"}`,
+        );
       }
-
-      await siyuanAPI.addToDocument(mostRecentDocId, content, addTimestamp || false); // 使用用户设置的时间戳选项
-
-      await closeMainWindow({
-        clearRootSearch: true,
-        popToRootType: PopToRootType.Immediate,
-      });
-
-      await showHUD("✅ 已添加到最近编辑的文档");
-    } catch (error) {
-      await closeMainWindow({
-        clearRootSearch: true,
-        popToRootType: PopToRootType.Immediate,
-      });
-
-      await showHUD(
-        `❌ 添加失败: ${error instanceof Error ? error.message : "未知错误"}`,
-      );
-    }
-  }, [addTimestamp]);
+    },
+    [addTimestamp],
+  );
 
   // 如果是快速模式，立即执行添加操作
   useEffect(() => {
@@ -308,14 +322,10 @@ export default function QuickAddNote(
     }
   }, [isQuickMode, initialContent, loadClipboardContent]);
 
-
-
-
-
   const handleDocumentSelect = async (docId: string) => {
     try {
       const title = await getDocumentTitle(docId);
-      
+
       // 检查是否有内容要添加
       const contentToAdd = content.trim();
       if (!contentToAdd) {
@@ -365,25 +375,25 @@ export default function QuickAddNote(
   }
 
   return (
-          <Form
-        isLoading={isLoading}
-        actions={
-          <ActionPanel>
-            <ActionPanel.Section>
-              <Action
-                title="选择目标文档"
-                icon={Icon.List}
-                onAction={() => setShowDocumentSelector(true)}
-              />
-              <Action
-                title="使用最近编辑的文档"
-                icon={Icon.Clock}
-                onAction={handleSelectRecentDocument}
-                shortcut={{ modifiers: ["cmd"], key: "r" }}
-              />
-            </ActionPanel.Section>
-          </ActionPanel>
-        }
+    <Form
+      isLoading={isLoading}
+      actions={
+        <ActionPanel>
+          <ActionPanel.Section>
+            <Action
+              title="选择目标文档"
+              icon={Icon.List}
+              onAction={() => setShowDocumentSelector(true)}
+            />
+            <Action
+              title="使用最近编辑的文档"
+              icon={Icon.Clock}
+              onAction={handleSelectRecentDocument}
+              shortcut={{ modifiers: ["cmd"], key: "r" }}
+            />
+          </ActionPanel.Section>
+        </ActionPanel>
+      }
     >
       <Form.Description
         title="快速添加"
@@ -399,8 +409,6 @@ export default function QuickAddNote(
         enableMarkdown
         autoFocus
       />
-
-
 
       <Form.Checkbox
         id="addTimestamp"

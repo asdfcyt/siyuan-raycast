@@ -218,10 +218,11 @@ export default function SearchNotes(
       // 获取当前活跃的应用程序信息
       const frontmostApp = await getFrontmostApplication();
       const appName = frontmostApp.name || "未知应用";
-      
+
       // 获取用于粘贴的内容
-      const contentToPaste = pasteContentMap[block.id] || block.markdown || block.content;
-      
+      const contentToPaste =
+        pasteContentMap[block.id] || block.markdown || block.content;
+
       if (!contentToPaste) {
         showToast({
           style: Toast.Style.Failure,
@@ -279,20 +280,20 @@ export default function SearchNotes(
     try {
       const [references, stats] = await Promise.all([
         siyuanAPI.getBlockReferences(block.id),
-        siyuanAPI.getReferenceStats(block.id)
+        siyuanAPI.getReferenceStats(block.id),
       ]);
 
-      let detailsText = `# 引用详情 - ${block.isDocument ? '文档' : '块'}\n\n`;
-      detailsText += `**标题**: ${block.content.substring(0, 50)}${block.content.length > 50 ? '...' : ''}\n\n`;
-      
+      let detailsText = `# 引用详情 - ${block.isDocument ? "文档" : "块"}\n\n`;
+      detailsText += `**标题**: ${block.content.substring(0, 50)}${block.content.length > 50 ? "..." : ""}\n\n`;
+
       if (stats.totalReferences === 0) {
         detailsText += `暂无引用记录`;
       } else {
         detailsText += `## 统计信息\n\n`;
         detailsText += `- **总引用次数**: ${stats.totalReferences}\n`;
         detailsText += `- **引用应用数**: ${stats.uniqueApps}\n`;
-        detailsText += `- **最后引用时间**: ${stats.lastReferenceTime || '未知'}\n\n`;
-        
+        detailsText += `- **最后引用时间**: ${stats.lastReferenceTime || "未知"}\n\n`;
+
         detailsText += `## 应用引用次数\n\n`;
         Object.entries(stats.appCounts).forEach(([app, count]) => {
           detailsText += `- **${app}**: ${count} 次\n`;
@@ -390,7 +391,7 @@ export default function SearchNotes(
 
   const getAccessories = (block: SiYuanBlock) => {
     const accessories: Array<{ text?: string; tooltip?: string }> = [];
-    
+
     // 如果块有引用记录，显示引用标识
     if (referenceStatusMap[block.id]) {
       accessories.push({
@@ -398,7 +399,7 @@ export default function SearchNotes(
         tooltip: "此内容已被其他应用引用",
       });
     }
-    
+
     // 不显示时间，保持界面简洁
     return accessories;
   };
